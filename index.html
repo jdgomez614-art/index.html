@@ -156,7 +156,9 @@ let scores = {};
 let duplicates = new Set();
 let nonJpg = new Set();
 let accessToken = null;
+let tokenExpiry = 0; // timestamp ms cuando vence el token
 let tokenClient = null;
+let clientIdStored = '';
 
 function isJpg(f) {
   return f.mimeType === 'image/jpeg' || /\.(jpg|jpeg)$/i.test(f.name);
@@ -176,16 +178,52 @@ function setWarn(msg) {
   else el.classList.remove('visible');
 }
 
+// ── Token management ───────────────────────────────────────────────────────
+// Refresca el token silenciosamente si está a menos de 5 minutos de vencer
+function refreshToken() {
+  return new Promise((resolve, reject) => {
+    if (!tokenClient) { reject(new Error('No hay sesión iniciada')); return; }
+    // Sobreescribir callback para este refresh
+    tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: clientIdStored,
+      scope: 'https://www.googleapis.com/auth/drive',
+      callback: (resp) => {
+        if (resp.error) { reject(new Error(resp.error)); return; }
+        accessToken = resp.access_token;
+        tokenExpiry = Date.now() + (resp.expires_in - 300) * 1000; // 5 min antes
+        resolve(accessToken);
+      }
+    });
+    // prompt: '' = silencioso, sin pantalla de consentimiento
+    tokenClient.requestAccessToken({ prompt: '' });
+  });
+}
+
+async function getValidToken() {
+  // Si el token vence en menos de 5 minutos, refrescarlo
+  if (Date.now() >= tokenExpiry) {
+    setStatus('Renovando sesión...', '');
+    await refreshToken();
+  }
+  return accessToken;
+}
+
+// ── OAuth init ─────────────────────────────────────────────────────────────
 function initOAuth() {
   const clientId = document.getElementById('clientId').value.trim();
   if (!clientId) { setStatus('Ingresa tu Client ID primero.', 'err'); return; }
   if (typeof google === 'undefined') { setStatus('Cargando librería de Google... espera 2 segundos e intenta de nuevo.', 'err'); return; }
+
+  clientIdStored = clientId;
+
   tokenClient = google.accounts.oauth2.initTokenClient({
     client_id: clientId,
     scope: 'https://www.googleapis.com/auth/drive',
     callback: async (resp) => {
       if (resp.error) { setStatus('Error OAuth: ' + resp.error, 'err'); return; }
       accessToken = resp.access_token;
+      // Guardar cuándo vence (Google da 3600s, guardamos con 5min de margen)
+      tokenExpiry = Date.now() + ((resp.expires_in || 3600) - 300) * 1000;
       try {
         const u = await (await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
           headers: { Authorization: 'Bearer ' + accessToken }
@@ -201,20 +239,23 @@ function initOAuth() {
 }
 
 function signOut() {
-  accessToken = null;
+  accessToken = null; tokenExpiry = 0;
   document.getElementById('authBar').classList.remove('visible');
   document.getElementById('loadBtn').disabled = true;
   document.getElementById('results').style.display = 'none';
   setStatus('Sesión cerrada.'); setWarn('');
 }
 
+// ── Drive helpers ──────────────────────────────────────────────────────────
 async function driveGet(url) {
-  const res = await fetch(url, { headers: { Authorization: 'Bearer ' + accessToken } });
+  const token = await getValidToken();
+  const res = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
   const data = await res.json();
   if (data.error) throw new Error(data.error.message);
   return data;
 }
 
+// ── Main ───────────────────────────────────────────────────────────────────
 async function start() {
   if (!accessToken) { setStatus('Inicia sesión con Google primero.', 'err'); return; }
   const folderId = document.getElementById('folderId').value.trim();
@@ -238,10 +279,8 @@ async function start() {
     if (!allFiles.length) { setStatus('No se encontraron imágenes en esa carpeta.'); return; }
     photos = allFiles;
 
-    // Marcar no-JPG
     photos.forEach(p => { if (!isJpg(p)) nonJpg.add(p.id); });
 
-    // Duplicadas por md5 (solo JPGs)
     const hashMap = {};
     photos.forEach(p => {
       if (!isJpg(p) || !p.md5Checksum) return;
@@ -249,7 +288,6 @@ async function start() {
       else hashMap[p.md5Checksum] = p.id;
     });
 
-    // Duplicadas por nombre normalizado (solo JPGs)
     const nameMap = {};
     photos.forEach(p => {
       if (!isJpg(p)) return;
@@ -280,8 +318,9 @@ async function analyzeAll(visionKey) {
     setProgress(i, jpgs.length);
     setStatus(`Analizando ${i+1}/${jpgs.length}: ${photo.name}`);
     try {
+      const token = await getValidToken();
       const imgRes = await fetch(`https://www.googleapis.com/drive/v3/files/${photo.id}?alt=media`, {
-        headers: { Authorization: 'Bearer ' + accessToken }
+        headers: { Authorization: 'Bearer ' + token }
       });
       if (!imgRes.ok) { scores[photo.id] = 50; continue; }
       const blob = await imgRes.blob();
@@ -295,8 +334,7 @@ async function analyzeAll(visionKey) {
   }
   nonJpg.forEach(id => { scores[id] = 0; });
   setProgress(jpgs.length, jpgs.length);
-  const rawCount = nonJpg.size;
-  if (rawCount > 0) setWarn(`⚠ ${rawCount} archivos no-JPG detectados — están marcados para eliminar.`);
+  if (nonJpg.size > 0) setWarn(`⚠ ${nonJpg.size} archivos no-JPG detectados — están marcados para eliminar.`);
   setStatus(''); renderTable();
 }
 
@@ -305,7 +343,7 @@ function calcScore(vData) {
     const colors = vData.responses[0]?.imagePropertiesAnnotation?.dominantColors?.colors || [];
     let brightness = 0, colorfulness = 0, totalFrac = 0;
     colors.forEach(c => {
-      const r = c.color?.red||0, g = c.color?.green||0, b = c.color?.blue||0, frac = c.pixelFraction||0.01;
+      const r=c.color?.red||0, g=c.color?.green||0, b=c.color?.blue||0, frac=c.pixelFraction||0.01;
       totalFrac += frac;
       brightness += (r*0.299+g*0.587+b*0.114)/255*frac;
       colorfulness += ((Math.max(r,g,b)-Math.min(r,g,b))/255)*frac;
@@ -321,7 +359,7 @@ function calcScore(vData) {
 
 function renderTable() {
   const sorted = [...photos].sort((a, b) => {
-    const af = nonJpg.has(a.id)?1:0, bf = nonJpg.has(b.id)?1:0;
+    const af=nonJpg.has(a.id)?1:0, bf=nonJpg.has(b.id)?1:0;
     if (af !== bf) return bf - af;
     return (scores[a.id]??50) - (scores[b.id]??50);
   });
@@ -331,17 +369,16 @@ function renderTable() {
     `${photos.length} archivos — ${jpgCount} JPG — ${nonJpg.size} no-JPG — ${bad} mala calidad — ${duplicates.size} duplicadas`;
 
   document.getElementById('photoList').innerHTML = sorted.map(p => {
-    const score = scores[p.id]??50;
-    const isFmt = nonJpg.has(p.id), isDup = duplicates.has(p.id), isBad = isJpg(p)&&score<50;
-    const checked = isFmt||isDup||isBad;
-    const barColor = score<40?'#ef4444':score<62?'#f59e0b':'#22c55e';
-    const badge = isFmt ? `<span class="badge badge-fmt">${p.name.split('.').pop().toUpperCase()}</span>`
-      : isDup ? `<span class="badge badge-dup">duplicada</span>`
-      : isBad ? `<span class="badge badge-bad">mala calidad</span>`
-      : `<span class="badge badge-ok">ok</span>`;
-    const scoreCell = isFmt ? `<span style="color:var(--muted);font-size:10px;">—</span>`
-      : `<span class="bar-wrap"><span class="bar-fill" style="width:${score}%;background:${barColor};"></span></span><span class="score-num">${score}</span>`;
-    const thumb = p.thumbnailLink ? `<img class="thumb" src="${p.thumbnailLink}" loading="lazy" />` : `<div class="thumb-ph">🖼</div>`;
+    const score=scores[p.id]??50, isFmt=nonJpg.has(p.id), isDup=duplicates.has(p.id), isBad=isJpg(p)&&score<50;
+    const checked=isFmt||isDup||isBad;
+    const barColor=score<40?'#ef4444':score<62?'#f59e0b':'#22c55e';
+    const badge=isFmt?`<span class="badge badge-fmt">${p.name.split('.').pop().toUpperCase()}</span>`
+      :isDup?`<span class="badge badge-dup">duplicada</span>`
+      :isBad?`<span class="badge badge-bad">mala calidad</span>`
+      :`<span class="badge badge-ok">ok</span>`;
+    const scoreCell=isFmt?`<span style="color:var(--muted);font-size:10px;">—</span>`
+      :`<span class="bar-wrap"><span class="bar-fill" style="width:${score}%;background:${barColor};"></span></span><span class="score-num">${score}</span>`;
+    const thumb=p.thumbnailLink?`<img class="thumb" src="${p.thumbnailLink}" loading="lazy" />`:`<div class="thumb-ph">🖼</div>`;
     return `<tr>
       <td><input type="checkbox" id="chk_${p.id}" ${checked?'checked':''}></td>
       <td>${thumb}</td>
@@ -362,11 +399,21 @@ function selectFmt()      { photos.forEach(p => { const c=document.getElementByI
 function deselectAll()    { photos.forEach(p => { const c=document.getElementById('chk_'+p.id); if(c) c.checked=false; }); }
 function toggleAll(v)     { photos.forEach(p => { const c=document.getElementById('chk_'+p.id); if(c) c.checked=v; }); }
 
+// ── Delete con refresh automático de token ─────────────────────────────────
 async function deleteSelected() {
   if (!accessToken) { setStatus('Necesitas iniciar sesión con OAuth para eliminar.', 'err'); return; }
   const toDelete = photos.filter(p => document.getElementById('chk_'+p.id)?.checked);
   if (!toDelete.length) { setStatus('No hay archivos seleccionados.', 'err'); return; }
   if (!confirm(`¿Eliminar ${toDelete.length} archivos de Drive?\n\nEsta acción no se puede deshacer.`)) return;
+
+  // Refrescar token ANTES de empezar
+  try {
+    setStatus('Renovando sesión antes de eliminar...');
+    await refreshToken();
+  } catch(e) {
+    setStatus('No se pudo renovar la sesión. Haz clic en "Iniciar sesión con Google" de nuevo.', 'err');
+    return;
+  }
 
   document.getElementById('deleteBtn').disabled = true;
   setProgress(0, toDelete.length);
@@ -376,10 +423,17 @@ async function deleteSelected() {
     const photo = toDelete[i];
     setStatus(`Eliminando ${i+1}/${toDelete.length}: ${photo.name}`);
     setProgress(i+1, toDelete.length);
+
+    // Cada 50 archivos refrescar el token por si acaso
+    if (i > 0 && i % 50 === 0) {
+      try { await refreshToken(); } catch(e) { /* continuar */ }
+    }
+
     try {
+      const token = await getValidToken();
       const res = await fetch(`https://www.googleapis.com/drive/v3/files/${photo.id}`, {
         method: 'DELETE',
-        headers: { Authorization: 'Bearer ' + accessToken }
+        headers: { Authorization: 'Bearer ' + token }
       });
       if (res.ok || res.status === 204) {
         deleted++;
@@ -402,10 +456,10 @@ async function deleteSelected() {
 
 function blobToBase64Resized(blob, maxPx) {
   return new Promise((res, rej) => {
-    const img = new Image(), url = URL.createObjectURL(blob);
+    const img=new Image(), url=URL.createObjectURL(blob);
     img.onload = () => {
       URL.revokeObjectURL(url);
-      const scale = Math.min(1, maxPx/Math.max(img.width,img.height));
+      const scale=Math.min(1,maxPx/Math.max(img.width,img.height));
       const w=Math.round(img.width*scale), h=Math.round(img.height*scale);
       const canvas=document.createElement('canvas');
       canvas.width=w; canvas.height=h;
