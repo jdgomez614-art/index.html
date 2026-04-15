@@ -33,7 +33,6 @@
     line-height: 1.6;
   }
 
-  /* ── header ── */
   .header {
     display: flex;
     align-items: baseline;
@@ -45,7 +44,6 @@
   .header h1 { font-size: 14px; font-weight: 500; color: #fff; letter-spacing: .04em; }
   .header .sub { color: var(--muted); font-size: 11px; }
 
-  /* ── setup card ── */
   .card {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -85,7 +83,6 @@
   .hint a:hover { text-decoration: underline; }
   .hint strong { color: #888; }
 
-  /* ── buttons ── */
   .btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
 
   button {
@@ -109,7 +106,6 @@
   button.oauth:hover:not(:disabled) { background: #0a1020; }
   button:disabled { opacity: .35; cursor: not-allowed; }
 
-  /* ── status / progress ── */
   #statusWrap { min-height: 38px; margin: 12px 0; }
   #status { color: var(--muted); font-size: 11px; }
   #status.err { color: var(--danger); }
@@ -123,7 +119,6 @@
   progress::-webkit-progress-bar { background: var(--border); border-radius: 2px; }
   progress::-webkit-progress-value { background: var(--accent); border-radius: 2px; transition: width .2s; }
 
-  /* ── results ── */
   #results { display: none; }
 
   .toolbar {
@@ -132,7 +127,6 @@
   }
   .summary { color: var(--muted); font-size: 11px; flex: 1; }
 
-  /* ── table ── */
   .table-wrap { overflow-x: auto; }
   table { width: 100%; border-collapse: collapse; font-size: 11px; }
   th {
@@ -153,11 +147,11 @@
   .badge-bad { background: #2a0a0a; color: var(--danger); border: 1px solid #5a1a1a; }
   .badge-dup { background: #2a1a00; color: var(--warn); border: 1px solid #5a3a00; }
   .badge-ok  { background: #0a1a0a; color: var(--accent); border: 1px solid var(--accent-dim); }
+  .badge-raw { background: #1a0a2a; color: #a78bfa; border: 1px solid #3a1a5a; }
 
   .filename { color: #bbb; word-break: break-all; max-width: 280px; }
   .score-num { color: var(--muted); margin-left: 6px; }
 
-  /* ── auth status bar ── */
   .auth-bar {
     display: none;
     align-items: center; gap: 10px;
@@ -172,27 +166,15 @@
   .auth-bar.visible { display: flex; }
   .auth-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
   .auth-name { color: var(--text); }
-
-  /* ── tabs ── */
-  .tabs { display: flex; gap: 2px; margin-bottom: 16px; }
-  .tab {
-    padding: 6px 14px; border: 1px solid transparent;
-    border-radius: 4px; color: var(--muted); cursor: pointer;
-    font-family: 'IBM Plex Mono', monospace; font-size: 11px;
-    background: none;
-  }
-  .tab.active { border-color: var(--border-light); color: var(--text); background: var(--surface); }
-  .tab:hover:not(.active) { color: #888; }
 </style>
 </head>
 <body>
 
 <div class="header">
   <h1>photo cleaner</h1>
-  <span class="sub">google drive</span>
+  <span class="sub">google drive — solo JPG</span>
 </div>
 
-<!-- Auth status bar -->
 <div class="auth-bar" id="authBar">
   <div class="auth-dot"></div>
   <span>Conectado como</span>
@@ -200,60 +182,32 @@
   <button onclick="signOut()" style="margin-left:auto; padding:4px 10px; font-size:10px;">Cerrar sesión</button>
 </div>
 
-<!-- Setup -->
-<div class="card" id="setupCard">
+<div class="card">
   <div class="card-title">Configuración</div>
 
-  <div class="tabs">
-    <button class="tab active" onclick="switchMode('oauth', this)">OAuth2 (recomendado)</button>
-    <button class="tab" onclick="switchMode('apikey', this)">API Key + carpeta pública</button>
+  <label>Client ID de Google</label>
+  <input type="text" id="clientId" placeholder="xxxxxx.apps.googleusercontent.com" />
+  <div class="hint">
+    <a href="https://console.cloud.google.com/apis/credentials" target="_blank">Google Cloud Console</a> → Credenciales → ID de cliente OAuth 2.0 → Aplicación web<br>
+    Agrega tu URL de Vercel en "Orígenes JavaScript autorizados"
   </div>
 
-  <!-- OAuth mode -->
-  <div id="modeOauth">
-    <label>Client ID de Google</label>
-    <input type="text" id="clientId" placeholder="xxxxxx.apps.googleusercontent.com" />
-    <div class="hint">
-      Obtén tu Client ID en <a href="https://console.cloud.google.com/apis/credentials" target="_blank">Google Cloud Console</a>:<br>
-      1. Crear proyecto → Habilitar <strong>Drive API</strong> + <strong>Vision API</strong><br>
-      2. Credenciales → Crear <strong>ID de cliente OAuth 2.0</strong> → Aplicación web<br>
-      3. Agregar <strong>tu dominio de Vercel</strong> en "Orígenes JavaScript autorizados"<br>
-      4. Pegar el Client ID aquí
-    </div>
-    <label>API Key (para Vision API)</label>
-    <input type="password" id="visionKey" placeholder="AIzaSy..." />
-    <div class="hint">
-      Misma consola → Credenciales → Crear <strong>Clave de API</strong><br>
-      Habilita <strong>Cloud Vision API</strong> para este proyecto.
-    </div>
-    <label>ID de la carpeta de Drive</label>
-    <input type="text" id="folderId" placeholder="1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms" />
-    <div class="hint">
-      URL de Drive → drive.google.com/drive/folders/<strong>ESTE_ID</strong>
-    </div>
-    <div class="btn-row">
-      <button class="oauth" onclick="initOAuth()">🔐 Iniciar sesión con Google</button>
-      <button class="primary" id="loadBtn" onclick="start()" disabled>Cargar y analizar fotos</button>
-    </div>
+  <label>API Key (para Vision API)</label>
+  <input type="password" id="visionKey" placeholder="AIzaSy..." />
+  <div class="hint">
+    Misma consola → Credenciales → Clave de API<br>
+    Habilita <strong>Cloud Vision API</strong> en el proyecto
   </div>
 
-  <!-- API Key mode (public folders only) -->
-  <div id="modeApikey" style="display:none;">
-    <div class="hint" style="margin-bottom:12px; border-left-color:#f59e0b;">
-      ⚠️ Este modo <strong>solo funciona con carpetas públicas</strong> de Drive (compartidas con "Cualquier persona con el enlace").<br>
-      Para carpetas privadas usa el modo OAuth2.
-    </div>
-    <label>Google API Key</label>
-    <input type="password" id="apiKeyPub" placeholder="AIzaSy..." />
-    <label>ID de la carpeta pública</label>
-    <input type="text" id="folderIdPub" placeholder="1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms" />
-    <div class="hint">
-      La carpeta debe ser pública. ID en: drive.google.com/drive/folders/<strong>ESTE_ID</strong><br>
-      Habilita <strong>Drive API</strong> y <strong>Vision API</strong> en tu proyecto de GCP.
-    </div>
-    <div class="btn-row">
-      <button class="primary" onclick="startPublic()">Cargar y analizar fotos</button>
-    </div>
+  <label>ID de la carpeta de Drive</label>
+  <input type="text" id="folderId" placeholder="1y96i-W5ciTUmoU4KguK_gHa3avUDs4n9" />
+  <div class="hint">
+    URL de Drive → drive.google.com/drive/folders/<strong>ESTE_ID</strong>
+  </div>
+
+  <div class="btn-row">
+    <button class="oauth" onclick="initOAuth()">🔐 Iniciar sesión con Google</button>
+    <button class="primary" id="loadBtn" onclick="start()" disabled>Cargar y analizar fotos</button>
   </div>
 </div>
 
@@ -279,7 +233,7 @@
           <th style="width:52px;"></th>
           <th>Nombre</th>
           <th style="width:120px;">Calidad</th>
-          <th style="width:80px;">Estado</th>
+          <th style="width:90px;">Estado</th>
         </tr>
       </thead>
       <tbody id="photoList"></tbody>
@@ -287,19 +241,24 @@
   </div>
 </div>
 
-<!-- Google Identity Services -->
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 
 <script>
-// ── State ──────────────────────────────────────────────────────────────────
 let photos = [];
 let scores = {};
 let duplicates = new Set();
 let accessToken = null;
-let currentMode = 'oauth'; // 'oauth' | 'apikey'
 let tokenClient = null;
 
-// ── UI helpers ─────────────────────────────────────────────────────────────
+// Solo estos mimeTypes son JPG
+const JPG_TYPES = ['image/jpeg'];
+
+function isJpg(file) {
+  if (JPG_TYPES.includes(file.mimeType)) return true;
+  // también por extensión por si acaso
+  return /\.(jpg|jpeg)$/i.test(file.name);
+}
+
 function setStatus(msg, type = '') {
   const el = document.getElementById('status');
   el.textContent = msg;
@@ -310,30 +269,21 @@ function setProgress(v, max) {
   p.style.display = (v >= max || max === 0) ? 'none' : 'block';
   p.value = v; p.max = max;
 }
-function switchMode(mode, btn) {
-  currentMode = mode;
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  btn.classList.add('active');
-  document.getElementById('modeOauth').style.display = mode === 'oauth' ? 'block' : 'none';
-  document.getElementById('modeApikey').style.display = mode === 'apikey' ? 'block' : 'none';
-}
 
-// ── OAuth2 ─────────────────────────────────────────────────────────────────
 function initOAuth() {
   const clientId = document.getElementById('clientId').value.trim();
   if (!clientId) { setStatus('Ingresa tu Client ID primero.', 'err'); return; }
-
   if (typeof google === 'undefined') {
-    setStatus('Cargando librería de Google... intenta en 2 segundos.', 'err'); return;
+    setStatus('Cargando librería de Google... espera 2 segundos e intenta de nuevo.', 'err'); return;
   }
 
   tokenClient = google.accounts.oauth2.initTokenClient({
     client_id: clientId,
+    // scope completo de Drive para poder leer Y eliminar
     scope: 'https://www.googleapis.com/auth/drive',
     callback: (resp) => {
       if (resp.error) { setStatus('Error OAuth: ' + resp.error, 'err'); return; }
       accessToken = resp.access_token;
-      // Get user info
       fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
         headers: { Authorization: 'Bearer ' + accessToken }
       }).then(r => r.json()).then(u => {
@@ -356,120 +306,95 @@ function signOut() {
   setStatus('Sesión cerrada.');
 }
 
-// ── Drive fetch helpers ────────────────────────────────────────────────────
 async function driveGet(url) {
-  const headers = accessToken ? { Authorization: 'Bearer ' + accessToken } : {};
-  const res = await fetch(url, { headers });
+  const res = await fetch(url, { headers: { Authorization: 'Bearer ' + accessToken } });
   const data = await res.json();
   if (data.error) throw new Error(data.error.message);
   return data;
 }
 
-async function fetchAllPhotos(folderId, apiKey = null) {
-  let allFiles = [];
-  let pageToken = '';
-  do {
-    const q = encodeURIComponent(`'${folderId}' in parents and mimeType contains 'image/' and trashed = false`);
-    const fields = 'files(id,name,mimeType,thumbnailLink,md5Checksum,size),nextPageToken';
-    let url;
-    if (apiKey) {
-      url = `https://www.googleapis.com/drive/v3/files?q=${q}&fields=${encodeURIComponent(fields)}&pageSize=100${pageToken ? '&pageToken=' + pageToken : ''}&key=${apiKey}`;
-    } else {
-      url = `https://www.googleapis.com/drive/v3/files?q=${q}&fields=${encodeURIComponent(fields)}&pageSize=100${pageToken ? '&pageToken=' + pageToken : ''}`;
-    }
-    const data = await driveGet(url);
-    allFiles = allFiles.concat(data.files || []);
-    pageToken = data.nextPageToken || '';
-  } while (pageToken);
-  return allFiles;
-}
-
-// ── Main flow (OAuth) ──────────────────────────────────────────────────────
 async function start() {
   if (!accessToken) { setStatus('Inicia sesión con Google primero.', 'err'); return; }
   const folderId = document.getElementById('folderId').value.trim();
   const visionKey = document.getElementById('visionKey').value.trim();
   if (!folderId) { setStatus('Ingresa el ID de la carpeta.', 'err'); return; }
 
-  await runAnalysis(folderId, visionKey, null);
-}
-
-// ── Main flow (public API Key) ─────────────────────────────────────────────
-async function startPublic() {
-  const apiKey = document.getElementById('apiKeyPub').value.trim();
-  const folderId = document.getElementById('folderIdPub').value.trim();
-  if (!apiKey || !folderId) { setStatus('Completa los dos campos.', 'err'); return; }
-  accessToken = null; // ensure we use apiKey path
-  await runAnalysis(folderId, apiKey, apiKey);
-}
-
-// ── Shared analysis ────────────────────────────────────────────────────────
-async function runAnalysis(folderId, visionKey, driveApiKey) {
   photos = []; scores = {}; duplicates = new Set();
   document.getElementById('results').style.display = 'none';
   setStatus('Cargando lista de fotos...');
-  setProgress(0, 0);
 
   try {
-    photos = await fetchAllPhotos(folderId, driveApiKey);
-  } catch(e) {
-    setStatus('Error al cargar fotos: ' + e.message, 'err'); return;
-  }
+    let allFiles = [];
+    let pageToken = '';
+    do {
+      // Pedimos TODOS los tipos de imagen para poder mostrar cuántos ARW/RAW hay
+      const q = encodeURIComponent(`'${folderId}' in parents and mimeType contains 'image/' and trashed = false`);
+      const fields = encodeURIComponent('files(id,name,mimeType,thumbnailLink,md5Checksum,size),nextPageToken');
+      const url = `https://www.googleapis.com/drive/v3/files?q=${q}&fields=${fields}&pageSize=100${pageToken ? '&pageToken=' + pageToken : ''}`;
+      const data = await driveGet(url);
+      allFiles = allFiles.concat(data.files || []);
+      pageToken = data.nextPageToken || '';
+    } while (pageToken);
 
-  if (!photos.length) { setStatus('No se encontraron fotos en esa carpeta.'); return; }
+    const totalFound = allFiles.length;
+    // Filtrar: solo JPG
+    photos = allFiles.filter(isJpg);
+    const skipped = totalFound - photos.length;
 
-  // Detect duplicates by md5
-  const hashMap = {};
-  photos.forEach(p => {
-    if (p.md5Checksum) {
-      if (hashMap[p.md5Checksum]) duplicates.add(p.id);
-      else hashMap[p.md5Checksum] = p.id;
+    if (!photos.length) {
+      setStatus(`No se encontraron fotos JPG. (${skipped} archivos de otro formato ignorados)`);
+      return;
     }
-  });
 
-  // Detect duplicates by normalized name
-  const nameMap = {};
-  photos.forEach(p => {
-    const base = p.name
-      .replace(/\.\w+$/, '')                    // remove extension
-      .replace(/\s*\(\d+\)\s*$/, '')            // remove (1), (2)…
-      .replace(/\s*[-_]copy\s*$/i, '')          // remove -copy
-      .replace(/\s*copy\s*$/i, '')
-      .toLowerCase().trim();
-    if (nameMap[base]) duplicates.add(p.id);
-    else nameMap[base] = p.id;
-  });
+    // Detectar duplicadas por md5
+    const hashMap = {};
+    photos.forEach(p => {
+      if (p.md5Checksum) {
+        if (hashMap[p.md5Checksum]) duplicates.add(p.id);
+        else hashMap[p.md5Checksum] = p.id;
+      }
+    });
 
-  setStatus(`${photos.length} fotos encontradas, ${duplicates.size} duplicadas. Analizando calidad...`);
+    // Detectar duplicadas por nombre normalizado
+    const nameMap = {};
+    photos.forEach(p => {
+      const base = p.name
+        .replace(/\.\w+$/, '')
+        .replace(/\s*\(\d+\)\s*$/, '')
+        .replace(/\s*[-_]copy\s*$/i, '')
+        .replace(/\s*copy\s*$/i, '')
+        .toLowerCase().trim();
+      if (nameMap[base]) duplicates.add(p.id);
+      else nameMap[base] = p.id;
+    });
 
-  if (visionKey) {
-    await analyzeAll(visionKey, driveApiKey);
-  } else {
-    // No vision key: just render with score 50 for everything
-    photos.forEach(p => { scores[p.id] = 50; });
-    setStatus(`${photos.length} fotos cargadas (sin análisis de calidad — agrega una Vision API Key).`);
-    renderTable();
+    setStatus(`${photos.length} JPGs encontrados${skipped ? ` (${skipped} RAW/otros ignorados)` : ''}, ${duplicates.size} duplicadas. Analizando calidad...`);
+
+    if (visionKey) {
+      await analyzeAll(visionKey);
+    } else {
+      photos.forEach(p => { scores[p.id] = 50; });
+      setStatus(`${photos.length} JPGs cargados (sin análisis — agrega una Vision API Key).`);
+      renderTable();
+    }
+  } catch(e) {
+    setStatus('Error: ' + e.message, 'err');
   }
 }
 
-async function analyzeAll(visionKey, driveApiKey) {
+async function analyzeAll(visionKey) {
   setProgress(0, photos.length);
   for (let i = 0; i < photos.length; i++) {
     const photo = photos[i];
     setProgress(i, photos.length);
     setStatus(`Analizando ${i + 1}/${photos.length}: ${photo.name}`);
     try {
-      let imgUrl, imgHeaders = {};
-      if (driveApiKey) {
-        imgUrl = `https://www.googleapis.com/drive/v3/files/${photo.id}?alt=media&key=${driveApiKey}`;
-      } else {
-        imgUrl = `https://www.googleapis.com/drive/v3/files/${photo.id}?alt=media`;
-        imgHeaders = { Authorization: 'Bearer ' + accessToken };
-      }
-      const imgRes = await fetch(imgUrl, { headers: imgHeaders });
+      const imgRes = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${photo.id}?alt=media`,
+        { headers: { Authorization: 'Bearer ' + accessToken } }
+      );
       if (!imgRes.ok) { scores[photo.id] = 50; continue; }
       const blob = await imgRes.blob();
-      // Resize before sending to Vision to save quota
       const base64 = await blobToBase64Resized(blob, 800);
       const content = base64.split(',')[1];
 
@@ -479,10 +404,7 @@ async function analyzeAll(visionKey, driveApiKey) {
         body: JSON.stringify({
           requests: [{
             image: { content },
-            features: [
-              { type: 'IMAGE_PROPERTIES', maxResults: 1 },
-              { type: 'SAFE_SEARCH_DETECTION' }
-            ]
+            features: [{ type: 'IMAGE_PROPERTIES', maxResults: 1 }]
           }]
         })
       });
@@ -508,10 +430,8 @@ function calcScore(vData) {
       const b = c.color?.blue || 0;
       const frac = c.pixelFraction || 0.01;
       totalFrac += frac;
-      const lum = (r * 0.299 + g * 0.587 + b * 0.114) / 255;
-      brightness += lum * frac;
-      const max = Math.max(r, g, b), min = Math.min(r, g, b);
-      colorfulness += ((max - min) / 255) * frac;
+      brightness += (r * 0.299 + g * 0.587 + b * 0.114) / 255 * frac;
+      colorfulness += ((Math.max(r,g,b) - Math.min(r,g,b)) / 255) * frac;
     });
     if (totalFrac > 0) { brightness /= totalFrac; colorfulness /= totalFrac; }
 
@@ -520,7 +440,6 @@ function calcScore(vData) {
     else if (brightness < 0.22) score -= 28;
     else if (brightness > 0.94) score -= 45;
     else if (brightness > 0.86) score -= 18;
-
     if (colorfulness < 0.04) score -= 30;
     else if (colorfulness < 0.09) score -= 12;
 
@@ -528,13 +447,12 @@ function calcScore(vData) {
   } catch(e) { return 50; }
 }
 
-// ── Render ─────────────────────────────────────────────────────────────────
 function renderTable() {
   const sorted = [...photos].sort((a, b) => (scores[a.id] ?? 50) - (scores[b.id] ?? 50));
   const bad = sorted.filter(p => (scores[p.id] ?? 50) < 50).length;
 
   document.getElementById('summary').textContent =
-    `${photos.length} fotos — ${bad} mala calidad — ${duplicates.size} duplicadas`;
+    `${photos.length} JPGs — ${bad} mala calidad — ${duplicates.size} duplicadas`;
 
   const tbody = document.getElementById('photoList');
   tbody.innerHTML = sorted.map(p => {
@@ -570,19 +488,17 @@ function escHtml(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-// ── Selection helpers ──────────────────────────────────────────────────────
 function selectBad()   { photos.forEach(p => { const c = document.getElementById('chk_'+p.id); if(c) c.checked = (scores[p.id]??50) < 50; }); }
 function selectDups()  { photos.forEach(p => { const c = document.getElementById('chk_'+p.id); if(c) c.checked = duplicates.has(p.id); }); }
 function selectAll()   { photos.forEach(p => { const c = document.getElementById('chk_'+p.id); if(c) c.checked = (scores[p.id]??50)<50 || duplicates.has(p.id); }); }
 function deselectAll() { photos.forEach(p => { const c = document.getElementById('chk_'+p.id); if(c) c.checked = false; }); }
 function toggleAll(v)  { photos.forEach(p => { const c = document.getElementById('chk_'+p.id); if(c) c.checked = v; }); }
 
-// ── Delete ─────────────────────────────────────────────────────────────────
 async function deleteSelected() {
+  if (!accessToken) { setStatus('Necesitas iniciar sesión con OAuth para eliminar.', 'err'); return; }
   const toDelete = photos.filter(p => document.getElementById('chk_'+p.id)?.checked);
   if (!toDelete.length) { setStatus('No hay fotos seleccionadas.', 'err'); return; }
   if (!confirm(`¿Eliminar ${toDelete.length} fotos de Drive? Esta acción no se puede deshacer.`)) return;
-  if (!accessToken) { setStatus('Necesitas iniciar sesión con OAuth para eliminar archivos.', 'err'); return; }
 
   document.getElementById('deleteBtn').disabled = true;
   setProgress(0, toDelete.length);
@@ -593,23 +509,34 @@ async function deleteSelected() {
     setStatus(`Eliminando ${i+1}/${toDelete.length}: ${photo.name}`);
     setProgress(i+1, toDelete.length);
     try {
-      const res = await fetch(`https://www.googleapis.com/drive/v3/files/${photo.id}`, {
-        method: 'DELETE',
-        headers: { Authorization: 'Bearer ' + accessToken }
-      });
+      const res = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${photo.id}`,
+        {
+          method: 'DELETE',
+          headers: { Authorization: 'Bearer ' + accessToken }
+        }
+      );
       if (res.ok || res.status === 204) {
         deleted++;
         photos = photos.filter(q => q.id !== photo.id);
         duplicates.delete(photo.id);
       } else {
+        const body = await res.json().catch(() => ({}));
+        console.error('Error eliminando', photo.name, res.status, body);
         errors++;
       }
-    } catch(e) { errors++; }
+    } catch(e) {
+      console.error('Excepción eliminando', photo.name, e);
+      errors++;
+    }
   }
 
   document.getElementById('deleteBtn').disabled = false;
   setProgress(toDelete.length, toDelete.length);
-  setStatus(`Listo: ${deleted} eliminadas${errors ? ', '+errors+' errores' : ''}.`, deleted > 0 ? 'ok' : 'err');
+  setStatus(
+    `Listo: ${deleted} eliminadas${errors ? ', ' + errors + ' errores' : ''}.`,
+    deleted > 0 ? 'ok' : 'err'
+  );
   if (photos.length) renderTable();
   else {
     document.getElementById('results').style.display = 'none';
@@ -617,7 +544,6 @@ async function deleteSelected() {
   }
 }
 
-// ── Image resize helper ────────────────────────────────────────────────────
 function blobToBase64Resized(blob, maxPx) {
   return new Promise((res, rej) => {
     const img = new Image();
